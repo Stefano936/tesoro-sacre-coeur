@@ -13,6 +13,14 @@ let storage;
 try { const raw = window.localStorage; storage = { getItem: () => raw.getItem(key), setItem: (_, v) => raw.setItem(key,v), removeItem: () => raw.removeItem(key) }; } catch { storage = { getItem(){throw Error();}, setItem(){throw Error();}, removeItem(){throw Error();} }; }
 let { found, persistent } = loadProgress(storage, ids);
 let active = null, running = false, won = false, visible = new Set(), toastTimer, cameraTimer;
+function cameraError(err={}) {
+  setError(err.name==='NotAllowedError'?'El permiso de cámara fue rechazado. Permití la cámara en los ajustes del sitio y reintentá.':err.name==='NotFoundError'?'No encontramos una cámara. Conectá una o usá otro dispositivo.':err.name==='NotReadableError'?'La cámara está ocupada o no pudo iniciarse. Cerrá otras aplicaciones que la usen y reintentá.':'No pudimos acceder a la cámara. Revisá sus permisos y cerrá otras aplicaciones que la estén usando.');
+}
+// AR.js 3.4.8 emite camera-error sin detail. Conservamos la causa original del navegador.
+if(!testing && navigator.mediaDevices?.getUserMedia) {
+  const original=navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia=function(...args){return original.apply(this,args).catch(err=>{cameraError(err);throw err;});};
+}
 $('story').textContent = mission;
 if (testing) { document.body.classList.add('testing'); $('test-banner').hidden = false; $('test-banner').textContent = demo ? 'Modo demostración: detección simulada' : 'Prueba de detector: imagen estática · sin cámara'; for(const dialog of document.querySelectorAll('dialog')) {const label=document.createElement('p');label.className='test-label';label.textContent=$('test-banner').textContent;dialog.prepend(label);} }
 function renderProgress() {
@@ -33,6 +41,7 @@ function clueFor(station) {
   if (earlier) text = `Encontraste ${station.name} antes de tiempo. El fragmento queda guardado. Buscá ahora «${earlier.name}» y después regresá a Tesoro.`;
   else if (found.size===3) text = station.id==='tesoro' ? 'La llave está completa. ¡El cofre es tuyo!' : 'Tenés los tres fragmentos. Volvé a escanear la estación «Tesoro» para abrir el cofre.';
   else if (found.has('tesoro') && missing.length) text += ` Te falta «${missing[0].name}».`;
+  if(station.location) text += ` Estación actual: ${station.location}.`;
   $('clue-label').textContent=station.stage.toUpperCase(); $('clue-title').textContent=station.title; $('clue-text').textContent=text;
 }
 function updateChest() {
@@ -56,7 +65,7 @@ function onLost(station) {
     else $('detection').textContent='Buscando marcador · la pista queda disponible';
   }
 }
-function loadScript(src) { return new Promise((resolve,reject)=>{const script=document.createElement('script'); script.src=src; script.onload=resolve; script.onerror=()=>reject(new Error('No pudimos cargar los recursos de realidad aumentada. Revisá la conexión y reintentá.')); document.head.append(script);}); }
+function loadScript(src) { return new Promise((resolve,reject)=>{const script=document.createElement('script'); const timer=setTimeout(()=>reject(new Error('La carga de realidad aumentada tardó demasiado. Revisá la conexión y reintentá.')),15000); script.src=src; script.onload=()=>{clearTimeout(timer);resolve();}; script.onerror=()=>{clearTimeout(timer);reject(new Error('No pudimos cargar los recursos de realidad aumentada. Revisá la conexión y reintentá.'));}; document.head.append(script);}); }
 let libraries;
 async function ensureLibraries() {
   if(!libraries) libraries=(async()=>{await loadScript('./assets/vendor/aframe-1.8.0.min.js'); if(!window.AFRAME) throw Error('A-Frame no está disponible.'); if(!demo) { await loadScript('./assets/vendor/aframe-ar-3.4.8.js'); if(!AFRAME.systems.arjs) throw Error('AR.js no está disponible.'); }})();
@@ -92,13 +101,11 @@ async function start() {
   $('start').disabled=false;
 }
 window.addEventListener('camera-error',event=>{
-  const err=event.detail?.error || event.detail || {};
-  const name=err.name || '';
-  setError(name==='NotAllowedError'?'El permiso de cámara fue rechazado. Permití la cámara en los ajustes del sitio y reintentá.':name==='NotFoundError'?'No encontramos una cámara. Conectá una o usá otro dispositivo.':'No pudimos acceder a la cámara. Revisá sus permisos y cerrá otras aplicaciones que la estén usando.');
+  if($('error').hidden) cameraError(event.detail?.error || event.detail || {});
 });
 window.addEventListener('arjs-video-loaded',()=>{clearTimeout(cameraTimer);clearError();$('detection').textContent='Cámara lista · buscá un marcador';});
 function reset() {
-  found.clear(); persistent=clearProgress(storage); active=null;visible.clear();won=false;clearTimeout(toastTimer);$('toast').hidden=true; clearError();
+  found.clear(); persistent=clearProgress(storage); active=null;visible.clear();won=false;clearTimeout(toastTimer);$('toast').hidden=true;
   renderProgress();updateChest();$('clue-label').textContent='TU MISIÓN';$('clue-title').textContent='Buscá la estación Inicio';$('clue-text').textContent='Encuadrá el marcador completo. Cada estación guarda un fragmento.';
   if(demo) stations.forEach(s=>$(`marker-${s.id}`)?.setAttribute('visible',false));
   for(const id of ['victory','reset-dialog']) if($(id).open) $(id).close();
