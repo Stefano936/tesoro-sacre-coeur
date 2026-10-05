@@ -1,5 +1,10 @@
 # El tesoro de Sacré Coeur
 
+**Juego:** https://stefano936.github.io/tesoro-sacre-coeur/  
+**Marcadores:** https://stefano936.github.io/tesoro-sacre-coeur/marcadores.html  
+**Evidencias:** https://stefano936.github.io/tesoro-sacre-coeur/evidencias/  
+**Repositorio:** https://github.com/Stefano936/tesoro-sacre-coeur
+
 Juego web estático del [laboratorio de UCU](https://github.com/ucudal/TECND_Catalogo/blob/main/laboratorios/laboratorio_ar.md). No instala apps, no usa backend, cuentas, audio ni servicios pagos.
 
 ## Cómo jugar
